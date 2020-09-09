@@ -1,0 +1,416 @@
+
+    -----------------------------------------------------------------------
+          Psi4: An Open-Source Ab Initio Electronic Structure Package
+                               Psi4 1.3.2 release
+
+                         Git: Rev {HEAD} ecbda83 
+
+
+    R. M. Parrish, L. A. Burns, D. G. A. Smith, A. C. Simmonett,
+    A. E. DePrince III, E. G. Hohenstein, U. Bozkaya, A. Yu. Sokolov,
+    R. Di Remigio, R. M. Richard, J. F. Gonthier, A. M. James,
+    H. R. McAlexander, A. Kumar, M. Saitow, X. Wang, B. P. Pritchard,
+    P. Verma, H. F. Schaefer III, K. Patkowski, R. A. King, E. F. Valeev,
+    F. A. Evangelista, J. M. Turney, T. D. Crawford, and C. D. Sherrill,
+    J. Chem. Theory Comput. 13(7) pp 3185--3197 (2017).
+    (doi: 10.1021/acs.jctc.7b00174)
+
+
+                         Additional Contributions by
+    P. Kraus, H. Kruse, M. H. Lechner, M. C. Schieber, R. A. Shaw,
+    A. Alenaizan, R. Galvelis, Z. L. Glick, S. Lehtola, and J. P. Misiewicz
+
+    -----------------------------------------------------------------------
+
+
+    Psi4 started on: Monday, 27 April 2020 06:53AM
+
+    Process ID: 7652
+    Host:       ds3
+    PSIDATADIR: /theoryfs2/ds/metcalf/miniconda2/envs/tf2gpu/share/psi4
+    Memory:     500.0 MiB
+    Threads:    1
+    
+  ==> Input File <==
+
+--------------------------------------------------------------------------
+import numpy as np
+set {scf_type pk
+basis cc-pvdz
+d_convergence 10
+gdma_switch   0
+gdma_limit    0
+gdma_origin   [ 0.0,  0.0,  0.0 ]
+}
+molecule test {
+    units Angstrom
+    0 1
+    --
+    0 1
+    C                1.773548443265925     0.225229028301859     0.149505715982404
+    C                2.397548443265925     1.629229028301859     0.099505715982405
+    H                2.556548443265925    -0.532770971698141     0.177505715982404
+    H                1.133548443265925     0.102229028301859     1.021505715982405
+    H                1.145548443265925     0.055229028301859    -0.724494284017595
+    H                1.588548443265925     2.343229028301859    -0.072494284017595
+    H                3.103748443265925     1.712309028301859    -0.739767284017596
+    H                2.877278443265925     1.891689028301859     1.053954715982405
+    C               -1.589451556734075    -1.512770971698141    -0.135494284017596
+    C               -2.572451556734075    -0.338770971698141    -0.114494284017595
+    H               -0.769451556734075    -1.304770971698141    -0.821494284017595
+    H               -1.193451556734075    -1.675770971698141     0.867505715982405
+    H               -2.110451556734075    -2.416770971698141    -0.455494284017596
+    H               -3.402451556734075    -0.614770971698141     0.534505715982405
+    H               -2.941361556734075    -0.155030971698141    -1.134371284017596
+    H               -2.097521556734075     0.560479028301859     0.304772715982405
+
+}
+e, wfn = energy('scf', return_wfn=True)
+gdma(wfn)
+dmavals = variable('DMA DISTRIBUTED MULTIPOLES')
+charges = np.array(dmavals)
+print(charges)
+np.save('SSI-009ILE-092LEU-2-dimer.npy', np.array(charges))--------------------------------------------------------------------------
+
+*** tstart() called on ds3
+*** at Mon Apr 27 06:53:07 2020
+
+   => Loading Basis Set <=
+
+    Name: CC-PVDZ
+    Role: ORBITAL
+    Keyword: BASIS
+    atoms 1-2, 9-10  entry C          line   138 file /theoryfs2/ds/metcalf/miniconda2/envs/tf2gpu/share/psi4/basis/cc-pvdz.gbs 
+    atoms 3-8, 11-16 entry H          line    22 file /theoryfs2/ds/metcalf/miniconda2/envs/tf2gpu/share/psi4/basis/cc-pvdz.gbs 
+
+
+         ---------------------------------------------------------
+                                   SCF
+               by Justin Turney, Rob Parrish, Andy Simmonett
+                          and Daniel G. A. Smith
+                              RHF Reference
+                        1 Threads,    500 MiB Core
+         ---------------------------------------------------------
+
+  ==> Geometry <==
+
+    Molecular point group: c1
+    Full point group: C1
+
+    Geometry (in Angstrom), charge = 0, multiplicity = 1:
+
+       Center              X                  Y                   Z               Mass       
+    ------------   -----------------  -----------------  -----------------  -----------------
+         C            1.773548443266     0.225229028302     0.149505715982    12.000000000000
+         C            2.397548443266     1.629229028302     0.099505715982    12.000000000000
+         H            2.556548443266    -0.532770971698     0.177505715982     1.007825032230
+         H            1.133548443266     0.102229028302     1.021505715982     1.007825032230
+         H            1.145548443266     0.055229028302    -0.724494284018     1.007825032230
+         H            1.588548443266     2.343229028302    -0.072494284018     1.007825032230
+         H            3.103748443266     1.712309028302    -0.739767284018     1.007825032230
+         H            2.877278443266     1.891689028302     1.053954715982     1.007825032230
+         C           -1.589451556734    -1.512770971698    -0.135494284018    12.000000000000
+         C           -2.572451556734    -0.338770971698    -0.114494284018    12.000000000000
+         H           -0.769451556734    -1.304770971698    -0.821494284018     1.007825032230
+         H           -1.193451556734    -1.675770971698     0.867505715982     1.007825032230
+         H           -2.110451556734    -2.416770971698    -0.455494284018     1.007825032230
+         H           -3.402451556734    -0.614770971698     0.534505715982     1.007825032230
+         H           -2.941361556734    -0.155030971698    -1.134371284018     1.007825032230
+         H           -2.097521556734     0.560479028302     0.304772715982     1.007825032230
+
+  Running in c1 symmetry.
+
+  Rotational constants: A =      0.43732  B =      0.04990  C =      0.04640 [cm^-1]
+  Rotational constants: A =  13110.37952  B =   1496.00972  C =   1391.16916 [MHz]
+  Nuclear repulsion =  121.888746076496446
+
+  Charge       = 0
+  Multiplicity = 1
+  Electrons    = 36
+  Nalpha       = 18
+  Nbeta        = 18
+
+  ==> Algorithm <==
+
+  SCF Algorithm Type is PK.
+  DIIS enabled.
+  MOM disabled.
+  Fractional occupation disabled.
+  Guess Type is SAD.
+  Energy threshold   = 1.00e-06
+  Density threshold  = 1.00e-10
+  Integral threshold = 0.00e+00
+
+  ==> Primary Basis <==
+
+  Basis Set: CC-PVDZ
+    Blend: CC-PVDZ
+    Number of shells: 60
+    Number of basis function: 116
+    Number of Cartesian functions: 120
+    Spherical Harmonics?: true
+    Max angular momentum: 2
+
+  ==> Pre-Iterations <==
+
+   -------------------------------------------------------
+    Irrep   Nso     Nmo     Nalpha   Nbeta   Ndocc  Nsocc
+   -------------------------------------------------------
+     A        116     116       0       0       0       0
+   -------------------------------------------------------
+    Total     116     116      18      18      18       0
+   -------------------------------------------------------
+
+  ==> Integral Setup <==
+
+  Using integral reordering PK algorithm.
+  Sizing the integral batches needed.
+  Building batch lookup table.
+   Calculation information:
+      Number of atoms:                  16
+      Number of AO shells:              60
+      Number of primitives:            148
+      Number of atomic orbitals:       120
+      Number of basis functions:       116
+
+      Integral cutoff                 1.00e-12
+      Number of threads:                 1
+
+	Batch   1 pq = [       0,    6786] index = [             0,23028291] size =     23028291
+  Task number: 3
+  Buffer size: 11059200
+  Buffer per thread: 2
+  We computed 1443899 shell quartets total.
+  Whereas there are 1675365 unique shell quartets.
+
+  ==> DiskJK: Disk-Based J/K Matrices <==
+
+    J tasked:                  Yes
+    K tasked:                  Yes
+    wK tasked:                  No
+    Memory [MiB]:              375
+    Schwarz Cutoff:          1E-12
+
+    OpenMP threads:              1
+
+  Minimum eigenvalue in the overlap matrix is 7.3938769556E-03.
+  Using Symmetric Orthogonalization.
+
+  SCF Guess: Superposition of Atomic Densities via on-the-fly atomic UHF.
+
+  ==> Iterations <==
+
+                        Total Energy        Delta E     RMS |[F,P]|
+
+   @RHF iter SAD:  -157.32566749729523   -1.57326e+02   0.00000e+00 
+   @RHF iter   1:  -158.30847243691392   -9.82805e-01   4.19462e-03 DIIS
+   @RHF iter   2:  -158.44103943316938   -1.32567e-01   1.78754e-03 DIIS
+   @RHF iter   3:  -158.46424135778372   -2.32019e-02   3.48597e-04 DIIS
+   @RHF iter   4:  -158.46605843355144   -1.81708e-03   3.85200e-05 DIIS
+   @RHF iter   5:  -158.46608163629080   -2.32027e-05   6.46355e-06 DIIS
+   @RHF iter   6:  -158.46608225871779   -6.22427e-07   9.79172e-07 DIIS
+   @RHF iter   7:  -158.46608226851038   -9.79259e-09   3.04341e-07 DIIS
+   @RHF iter   8:  -158.46608226929550   -7.85121e-10   3.68198e-08 DIIS
+   @RHF iter   9:  -158.46608226931670   -2.12026e-11   6.03245e-09 DIIS
+   @RHF iter  10:  -158.46608226931681   -1.13687e-13   1.61685e-09 DIIS
+   @RHF iter  11:  -158.46608226931639    4.26326e-13   4.22468e-10 DIIS
+   @RHF iter  12:  -158.46608226931690   -5.11591e-13   1.14824e-10 DIIS
+   @RHF iter  13:  -158.46608226931647    4.26326e-13   2.11638e-11 DIIS
+  Energy and wave function converged.
+
+
+  ==> Post-Iterations <==
+
+    Orbital Energies [Eh]
+    ---------------------
+
+    Doubly Occupied:                                                      
+
+       1A    -11.220788     2A    -11.219388     3A    -11.217377  
+       4A    -11.216274     5A     -1.018363     6A     -1.015244  
+       7A     -0.839829     8A     -0.834337     9A     -0.601980  
+      10A     -0.600215    11A     -0.595174    12A     -0.592164  
+      13A     -0.503417    14A     -0.496410    15A     -0.490929  
+      16A     -0.485972    17A     -0.485030    18A     -0.480007  
+
+    Virtual:                                                              
+
+      19A      0.167736    20A      0.199736    21A      0.227811  
+      22A      0.229228    23A      0.242595    24A      0.255273  
+      25A      0.263681    26A      0.273662    27A      0.274882  
+      28A      0.298212    29A      0.312054    30A      0.362956  
+      31A      0.393126    32A      0.397673    33A      0.570896  
+      34A      0.588139    35A      0.590928    36A      0.604120  
+      37A      0.610230    38A      0.626881    39A      0.673506  
+      40A      0.678682    41A      0.699850    42A      0.775563  
+      43A      0.842054    44A      0.862799    45A      0.882473  
+      46A      0.888602    47A      0.892106    48A      0.894375  
+      49A      0.900930    50A      0.906127    51A      0.909881  
+      52A      0.914319    53A      0.941372    54A      0.954118  
+      55A      0.978739    56A      0.982947    57A      1.120886  
+      58A      1.127048    59A      1.128009    60A      1.147332  
+      61A      1.219174    62A      1.259231    63A      1.465436  
+      64A      1.477794    65A      1.481594    66A      1.484273  
+      67A      1.553156    68A      1.588420    69A      1.678145  
+      70A      1.681188    71A      1.691460    72A      1.706054  
+      73A      1.851268    74A      1.861261    75A      1.867807  
+      76A      1.872458    77A      1.894231    78A      1.904585  
+      79A      1.928671    80A      1.939029    81A      1.941985  
+      82A      1.943961    83A      1.947489    84A      1.955583  
+      85A      1.956893    86A      1.969796    87A      1.979492  
+      88A      2.022150    89A      2.087114    90A      2.105806  
+      91A      2.122978    92A      2.126762    93A      2.283975  
+      94A      2.300325    95A      2.310291    96A      2.323136  
+      97A      2.443144    98A      2.449908    99A      2.458644  
+     100A      2.471467   101A      2.550490   102A      2.564067  
+     103A      2.572903   104A      2.582539   105A      2.756531  
+     106A      2.759550   107A      2.787661   108A      2.796025  
+     109A      2.839482   110A      2.843768   111A      2.853371  
+     112A      2.865972   113A      2.938963   114A      2.954170  
+     115A      2.958303   116A      2.968069  
+
+    Final Occupation by Irrep:
+              A 
+    DOCC [    18 ]
+
+  @RHF Final Energy:  -158.46608226931647
+
+   => Energetics <=
+
+    Nuclear Repulsion Energy =            121.8887460764964459
+    One-Electron Energy =                -452.8838570004833173
+    Two-Electron Energy =                 172.5290286546704124
+    Total Energy =                       -158.4660822693164732
+
+Computation Completed
+
+
+Properties will be evaluated at   0.000000,   0.000000,   0.000000 [a0]
+
+Properties computed using the SCF density matrix
+
+  Nuclear Dipole Moment: [e a0]
+     X:    -0.1026      Y:    -0.0326      Z:     0.0109
+
+  Electronic Dipole Moment: [e a0]
+     X:     0.0915      Y:     0.0197      Z:    -0.0071
+
+  Dipole Moment: [e a0]
+     X:    -0.0111      Y:    -0.0129      Z:     0.0038     Total:     0.0175
+
+  Dipole Moment: [D]
+     X:    -0.0283      Y:    -0.0328      Z:     0.0097     Total:     0.0444
+
+
+*** tstop() called on ds3 at Mon Apr 27 06:53:23 2020
+Module time:
+	user time   =       7.36 seconds =       0.12 minutes
+	system time =       2.70 seconds =       0.05 minutes
+	total time  =         16 seconds =       0.27 minutes
+Total time:
+	user time   =       7.36 seconds =       0.12 minutes
+	system time =       2.70 seconds =       0.05 minutes
+	total time  =         16 seconds =       0.27 minutes
+                                     G D M A
+
+                                 by Anthony Stone
+
+                           version 2.2.06, 22 June 2011
+
+               Distributed Multipoles from Gaussian wavefunctions
+
+
+Starting at 6:53:23 on 27 Apr 2020  
+
+
+Using SCF density matrix from file ./SSI/SSI-009ILE-092LEU-2-dimer.test.7652.fchk
+
+
+                         Distributed Multipole Analysis
+
+Standard DMA
+
+Positions and radii in angstrom
+Multipole moments in atomic units, ea_0^k for rank k
+
+C          x =  1.773548  y =  0.225229  z =  0.149506 angstrom
+           Maximum rank =  0   Radius =  0.650 angstrom
+                   Q00  =  -0.249805
+
+C          x =  2.397548  y =  1.629229  z =  0.099506 angstrom
+           Maximum rank =  0   Radius =  0.650 angstrom
+                   Q00  =  -0.228834
+
+H          x =  2.556548  y = -0.532771  z =  0.177506 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.079578
+
+H          x =  1.133548  y =  0.102229  z =  1.021506 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.081146
+
+H          x =  1.145548  y =  0.055229  z = -0.724494 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.078549
+
+H          x =  1.588548  y =  2.343229  z = -0.072494 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.076014
+
+H          x =  3.103748  y =  1.712309  z = -0.739767 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.081947
+
+H          x =  2.877278  y =  1.891689  z =  1.053955 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.081946
+
+C          x = -1.589452  y = -1.512771  z = -0.135494 angstrom
+           Maximum rank =  0   Radius =  0.650 angstrom
+                   Q00  =  -0.241269
+
+C          x = -2.572452  y = -0.338771  z = -0.114494 angstrom
+           Maximum rank =  0   Radius =  0.650 angstrom
+                   Q00  =  -0.232161
+
+H          x = -0.769452  y = -1.304771  z = -0.821494 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.080587
+
+H          x = -1.193452  y = -1.675771  z =  0.867506 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.078651
+
+H          x = -2.110452  y = -2.416771  z = -0.455494 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.077890
+
+H          x = -3.402452  y = -0.614771  z =  0.534506 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.078081
+
+H          x = -2.941362  y = -0.155031  z = -1.134371 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.078881
+
+H          x = -2.097522  y =  0.560479  z =  0.304773 angstrom
+           Maximum rank =  0   Radius =  0.325 angstrom
+                   Q00  =   0.078799
+
+Total multipoles referred to origin at
+           x =   0.000000,  y =    0.000000,  z =    0.000000 angstrom
+                   Q00  =  -0.000000
+
+Finished at 6:53:23 on 27 Apr 2020  
+
+  DMA results are available in the Python driver through the
+	  variable('DMA DISTRIBUTED MULTIPOLES')
+  and
+	  variable('DMA TOTAL MULTIPOLES')
+  commands.
+
+
+    Psi4 stopped on: Monday, 27 April 2020 06:53AM
+    Psi4 wall time for execution: 0:00:15.86
+
+*** Psi4 exiting successfully. Buy a developer a beer!
