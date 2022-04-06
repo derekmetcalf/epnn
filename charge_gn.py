@@ -120,17 +120,32 @@ class EPN_layer(tf.keras.layers.Layer):
 
 
 def get_init_edges(xyz, molecular_splits, num=32, cutoff=3.0, eta=2.0):
+    # get (num) evenly distributed numbers between 0.1 & cutoff
     mu = np.linspace(0.1, cutoff, num=num)
+    # Distance matrix of all atoms to all other atoms 
     D = scipy.spatial.distance_matrix(xyz,xyz)
 
+    # Molecular splits: If the molecule is split, this has an effekt on the adjacency matrix.
+    ####
+    # If there are no splits, the adj_matrix is just ones.
     if molecular_splits.shape == (0,):
         adj = np.ones(D.shape)
+
+    # If there is a split in the middle, the adjacency matrix is split into two squares and the rest zeroes
+    # e.g. for molecular_splits = 1
+    # [1,0,0]
+    # [0,1,1]
+    # [0,1,1]
     elif molecular_splits.shape == ():
+        # Make outer product of two vectors e.g. [1,1,1,0,0,0]x[0,0,0,1,1,1]
         molec_vecA = np.zeros(D.shape[0])
         molec_vecA[:molecular_splits] = 1
         molec_vecB = np.zeros(D.shape[0])
         molec_vecB[molecular_splits:] = 1
+        # adj = adjacency matrix. (Not needed in Crystal graphs as all elements are deemed to be adjacent to each other)
         adj = np.outer(molec_vecA, molec_vecA.T) + np.outer(molec_vecB, molec_vecB.T)
+
+    # Custom split, has not been relevant yet to me
     else:
         adj = np.zeros(D.shape)
         prev_split = 0
@@ -143,13 +158,14 @@ def get_init_edges(xyz, molecular_splits, num=32, cutoff=3.0, eta=2.0):
             adj += molec_mat
         print(adj)
         exit()
+    # Insert a new axis at the end -> ADJACENCY MATRIX IS NEVER USED!
     adj = np.expand_dims(adj, -1)
-
+    # Calculate C (Soft-Mask) out of Distance Matrix
+    # TODO: Change Cutoff function to represent own Cutoff!
     C = (np.cos(np.pi * (D - 0.0) / cutoff) + 1.0) / 2.0
-
     C[D >= cutoff] = 0.0
     C[D <= 0.0] = 1.0
-    np.fill_diagonal(C, 0.0)
+    np.fill_diagonal(C, 0.0) # Do not use tidstances to each other
     D = np.expand_dims(D, -1)
     D = np.tile(D, [1, 1, num])
     C = np.expand_dims(C, -1)
@@ -157,6 +173,7 @@ def get_init_edges(xyz, molecular_splits, num=32, cutoff=3.0, eta=2.0):
     mu = np.expand_dims(mu, 0)
     mu = np.expand_dims(mu, 0)
     mu = np.tile(mu, [D.shape[0], D.shape[1], 1])
+    # This is where the gaussian encodings for the distances are calculated
     e = C * np.exp(-eta * (D-mu)**2)
     e = np.array(e, dtype=np.float32)
 
@@ -290,6 +307,13 @@ def gen_flat_padded_init_state(path,  h_dim, e_dim):
     return x_padded, h_padded, q_padded, e_padded, Q, y_padded, pad
 
 def gen_padded_init_state(path,  h_dim, e_dim):
+    """
+    Create a padded initial state. 
+    Input:
+        - path: PATH to all the molecules in xyz format
+        - h_dim: Dimension for node encoding
+        - e_dim: Dimension for distance encoding (Gaussian encoding over different dimensions)
+    """
     x = []
     h = []
     q = []
@@ -314,8 +338,12 @@ def gen_padded_init_state(path,  h_dim, e_dim):
             else:
                 print('No labels provided, y set to 0')
                 y.append(np.zeros(len(lines)-2))
+
+            # Q = list of global charges for each molecule in directory (?)
             Q.append(np.array(lines[1].strip().split()[0], dtype=np.float32))
+            # names = names of all molecules in directory (?)
             names.append(filename[:-4])
+            # xyz are coordinates for each atom in the molecule
             xyz = []
             this_x = []
             for line in lines[2:]:
@@ -336,7 +364,7 @@ def gen_padded_init_state(path,  h_dim, e_dim):
             h.append(np.tile(np.zeros((this_x.shape[0], h_dim), dtype=np.float32), (these_edges.shape[0], 1)))
             avg_q = Q[-1] / len(this_x)
             q.append(np.tile(np.array(np.ones((len(this_x), 1)) * avg_q, dtype=np.float32), (these_edges.shape[0], 1)))
-
+    
     largest_system = np.max([y[i].shape[0] for i in range(len(y))])
 
     x_padded = np.zeros((len(Q), largest_system, largest_system,  x[0].shape[1]))
@@ -421,9 +449,17 @@ if __name__ == "__main__":
     train_acc = tf.keras.metrics.MeanAbsoluteError(name='train_acc')
     test_loss = tf.keras.metrics.Mean(name='test_loss')
     test_acc = tf.keras.metrics.MeanAbsoluteError(name='test_acc')
-    EPOCHS = 500
+    EPOCHS = 10
     best_test_acc = np.inf
-
+    
+    ###############################
+    # x: element encodings for nodes (nbatch x natom x natom x nelem)
+    # h: node encodings (nbatch x natom x natom x hdim)
+    # q: charge encodings (nbatch x natom x natom x 1)
+    # Q: Total charge of system (nbatch x 1)
+    # e: Distance encodings (nbatch x natom x natom x hdim)
+    # y: Ground truth: labels to predict (charges for each atom) (nbatch x natom x 1)
+    # x, h, q, e, Q, y, mask, names = get_init_crystal_states(path)
     x, h, q, e, Q, y, mask, names = gen_padded_init_state(path, h_dim, e_dim)
 
     model = make_model(layers, h_dim, T, n_elems, x.shape[1])
