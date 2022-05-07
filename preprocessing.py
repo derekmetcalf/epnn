@@ -248,5 +248,5 @@ if __name__ == "__main__":
     natom=105
     descriptors = preprocessed_dict["descriptors"]
     test = jnp.tile(jnp.expand_dims(descriptors,axis=2),(1,1,natom,1))
-    print(preprocessed_dict["cutoff_mask"]-np.transpose(preprocessed_dict["cutoff_mask"], axes=[0,2,1])==np.zeros(preprocessed_dict["cutoff_mask"].shape).all())
+    # print(preprocessed_dict["cutoff_mask"]-np.transpose(preprocessed_dict["cutoff_mask"], axes=[0,2,1])==np.zeros(preprocessed_dict["cutoff_mask"].shape).all())
     print("Something")
