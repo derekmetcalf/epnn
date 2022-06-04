@@ -1,7 +1,16 @@
-# Electron-Passing Neural Networks
-Partner code to "Electron-Passing Neural Networks for Atomic Charge Prediction in Systems with Arbitrary Molecular Charge"
-![protein_image](/assets/protein_fig.png)
+# Electron-Passing Neural Networks with jraph
 
-**(A.)** A comparison between reference MBIS charges and predicted EPNN charges on an anionic fragment of Galectin 3C. Blue indicates negatively charged atoms and red indicates positively charged. **(B.)** EPNN charge predictions on the entire 2220-atom Galectin 3C protein, net charge +2. The fragment from **A** is backlit to show similarity in charge prediction despite system size and charge changes.
 
-EPNNs are an extensible framework to encode graph-level conservation properties (such as conservation of charge in molecular systems) while operating only locally on portions of the graph. Use EPNNs for cheminformatics, force field charges, or as input to neural network potentials. Train and test your own EPNNs on your systems. Requires TensorFlow 2.x, numpy, scipy, and sklearn.
+### Current Status:
+- runs the EPNN Algorithm with jraph, haiku (instead of flax) and jax functionalities.
+- efficiency improvements in the batch function (2.2s for all 500 samples).
+- comparison of model performance during training for training and val set.
+
+### ToDo
+- End-2-End Training-Pipeline with batch-loading to use whole training-set
+- Change activation function? Swish-1?
+- Other possibilities for Edge features: normal distances / logarithmic distances / (1/d)^x as variants
+- Play around with network size, depth, number of timesteps, larger training size
+ master
+ - Write user guide
+ - Write report
