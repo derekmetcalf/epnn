@@ -33,12 +33,10 @@ def center_at_atoms_diagonal(coordinates: jnp.ndarray, cell_size_diagonal: jnp.n
     """ Vectorized version: v_center_at_atoms_diagonal -> Calculate the distances towards each atom inside of the batched coordinate array
 
     Input:
-        - coordinates (batchsize x n_atom x 3 (dimensions)): Coordinates of each atom.
-        - cell_size_diagonal (batchsize x 3): Diagonal values of the cell_size matrix. [2,2] = 0 as it is irrelevant.
-
+        - coordinates (n_atom x 3 (dimensions)): Coordinates of each atom.
+        - cell_size_diagonal (3): Diagonal values of the cell_size matrix. [2,2] = 0 as it is irrelevant.
     Output:
-        - batchwise distances: (batchsize x n_atom x n_atom)
-
+        - distances: (n_atom x n_atom)
     """
     delta = coordinates - coordinates[:, jnp.newaxis, :]
     zero_indices = cell_size_diagonal == 0.

@@ -5,10 +5,11 @@ import jax.numpy as jnp
 import functools
 import tqdm.auto
 import typing
+import math
 from preprocessing import get_cutoff_mask, get_init_charges, get_gaussian_distance_encodings, v_center_at_atoms_diagonal, type_to_charges_dict, SYMBOL_MAP
 
 def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
-                            distance_encoding_type = "gaussian", # ["gaussian","logarithmic","root","none"] TODO
+                            distance_encoding_type = "root", # ["log1","root","none"] 
                             r_switch = 1.0,
                             r_cut = 1.5,
                             edge_encoding_dim = 126,
@@ -98,11 +99,14 @@ def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
     cell_size = jnp.array(cell_size)
     distances = v_center_at_atoms_diagonal(positions,jnp.repeat(jnp.diag(cell_size)[jnp.newaxis,:],SAMPLE_SIZE, axis=0))
     cutoff_mask = get_cutoff_mask(batched_distances = distances, R_SWITCH = r_switch, R_CUT = r_cut)
-    if distance_encoding_type=="gaussian":
-        distances_encoded = get_gaussian_distance_encodings(batched_distances = distances, ETA = eta, R_CUT = r_cut, dim_encoding = edge_encoding_dim)
-        return descriptors, distances, distances_encoded, init_charges, gt_charges, cutoff_mask
+    if distance_encoding_type=="log1":
+        distances_encoded = get_gaussian_distance_encodings(batched_distances = jnp.log(distances+1.0), ETA = eta, R_CUT = math.log(r_cut+1), dim_encoding = edge_encoding_dim)
+    elif distance_encoding_type=="root":
+        distances_encoded = get_gaussian_distance_encodings(batched_distances = jnp.sqrt(distances), ETA = eta, R_CUT = math.sqrt(r_cut), dim_encoding = edge_encoding_dim)
     else:
-        return descriptors, distances, init_charges, gt_charges, cutoff_mask
+        distances_encoded = get_gaussian_distance_encodings(batched_distances = distances, ETA = eta, R_CUT = r_cut, dim_encoding = edge_encoding_dim)
+    return descriptors, distances, distances_encoded, init_charges, gt_charges, cutoff_mask, types
+
 
 
 if __name__ == "__main__":
