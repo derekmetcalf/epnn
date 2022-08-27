@@ -6,7 +6,7 @@ import functools
 import tqdm.auto
 import typing
 import math
-from preprocessing import get_cutoff_mask, get_init_charges, get_gaussian_distance_encodings, v_center_at_atoms_diagonal, type_to_charges_dict, SYMBOL_MAP
+from preprocessing import get_cutoff_mask, get_init_charges,get_init_charges_single, get_gaussian_distance_encodings, v_center_at_atoms_diagonal, type_to_charges_dict, SYMBOL_MAP
 
 def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
                             distance_encoding_type = "root", # ["log1","root","none"] 
@@ -97,6 +97,76 @@ def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
     # Run this as cell size of z-axis is irrelevant
     cell_size[2,2]=0.0
     cell_size = jnp.array(cell_size)
+    distances = v_center_at_atoms_diagonal(positions,jnp.repeat(jnp.diag(cell_size)[jnp.newaxis,:],SAMPLE_SIZE, axis=0))
+    cutoff_mask = get_cutoff_mask(batched_distances = distances, R_SWITCH = r_switch, R_CUT = r_cut)
+    if distance_encoding_type=="log1":
+        distances_encoded = get_gaussian_distance_encodings(batched_distances = jnp.log(distances+1.0), ETA = eta, R_CUT = math.log(r_cut+1), dim_encoding = edge_encoding_dim)
+    elif distance_encoding_type=="root":
+        distances_encoded = get_gaussian_distance_encodings(batched_distances = jnp.sqrt(distances), ETA = eta, R_CUT = math.sqrt(r_cut), dim_encoding = edge_encoding_dim)
+    else:
+        distances_encoded = get_gaussian_distance_encodings(batched_distances = distances, ETA = eta, R_CUT = r_cut, dim_encoding = edge_encoding_dim)
+    return descriptors, distances, distances_encoded, init_charges, gt_charges, cutoff_mask, types
+
+
+
+def get_init_crystal_states_single(
+                            descriptors : jnp.array,
+                            positions : jnp.array,
+                            gt_charges : jnp.array,
+                            types: jnp.array,
+                            type_to_charges_dict,
+                            cell_size : jnp.array,
+                            distance_encoding_type = "root", # ["log1","root","none"] 
+                            r_switch = 1.0,
+                            r_cut = 1.5,
+                            edge_encoding_dim = 24,
+                            eta = 2.0, # gaussian encoding variable
+                            SAMPLE_SIZE = None,
+                            ):
+    """ Returns preprocessed important data from the crystal database.
+
+    Input:
+        - descriptors : jnp.array -> single descriptor of a sample.
+        - positions : jnp.array -> single positions-array of a sample.
+        - gt_charges : jnp.array -> single gt_charges-array of a sample.
+        - types: jnp.array -> single types-array of a sample.
+        - type_to_charges_dict -> dict for type_to_charges
+        - cell_size : jnp.array -> single descriptor of a sample.
+        - distance_encoding_type: str -> Type of distance encoding (root/log/none)
+        - r_switch: The radius at which the function starts differing from 1.
+        - r_cut: The radius at which the function becomes exactly 0.
+    Output:
+        - Dictionary with keys:
+            - "charges": ground truth charges for each atom in each slab (batchsize x n_atom)
+            - "types": element info of each atom encoded (batchsize x n_atom) (0 = Oxygen, 1 = Strontium, 2 = Titanium)
+            - "atomic_numbers": atomic number of each atom (batchsize x n_atom) (8 = Oxygen, 38 = Strontium, 22 = Titanium)
+            - "positions": positions of all atoms (batchsize x n_atom x 3)
+            - "distances": pairwise distances between all atoms (batchsize x n_atom x n_atom)
+    """
+    #####################################
+    #####################################
+    ####### Stuff to run before function!
+    #####################################
+    #####################################
+    cell_size = np.array(cell_size)
+    # Run this as cell size of z-axis is irrelevant
+    cell_size[2,2]=0.0
+    cell_size = jnp.array(cell_size)
+
+    # Descriptor tensors are reshaped to flatten to bessel descriptors
+    descriptors = descriptors.reshape(*descriptors.shape[:2],-1)
+    types = jnp.asarray(types)
+    total_charge = 0.
+    natom = positions.shape[1]
+    
+    # This can be changed to "average", so all charges are initialized as 0.0
+    init_charges = get_init_charges_single(types,
+                                    "specific",
+                                    type_to_charges_dict,
+                                    total_charge)
+    init_charges = jnp.expand_dims(init_charges,axis=-1)
+
+    
     distances = v_center_at_atoms_diagonal(positions,jnp.repeat(jnp.diag(cell_size)[jnp.newaxis,:],SAMPLE_SIZE, axis=0))
     cutoff_mask = get_cutoff_mask(batched_distances = distances, R_SWITCH = r_switch, R_CUT = r_cut)
     if distance_encoding_type=="log1":

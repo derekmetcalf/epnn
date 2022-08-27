@@ -133,6 +133,32 @@ def get_init_charges(element_array: jnp.array,
         return return_array 
     else:
         raise Exception("Not a viable init method in function get_init_charges().")
+
+def get_init_charges_single(element_array: jnp.array,
+                    init_method: str, # ["specific","average"]
+                    charge_dict: dict = None,
+                    total_charge: jnp.array = None):
+    """ Get the charges for an array of element (encoded with type numbers, not atomic numbers).
+    Input:
+        - element_array (natom)
+        - init_method: str -> either 'specific' or 'average'. 
+            'specific' means that each element has a specific init charge dependent on the graphics sent from Jésus.
+            'average' means that the total charge is just divided by the number of atoms. As the total charge is 0, it would just return an array full of zeroes.
+        - charge_dict: Dictionary that connects element encoding (e.g. 0, 1 or 2) with specific charge.
+        - total_charge: total charge to average on or to check if specific charges are correct (sum of single charges == total_charge) (1)
+    
+    Output:
+        - return_array of single charges for each atom over all batches.
+    """
+    if init_method == "average":
+        average_charge = total_charge/float(element_array.shape[0]) # for a 2D array (batchsize x natom)
+        return jnp.ones_like(element_array)*np.expand_dims(average_charge,1) # broadcasting the result even though dimensions are different.
+    if init_method == "specific":
+        return_array = jnp.vectorize(charge_dict.get)(element_array)
+        assert (jnp.round(jnp.sum(return_array),3) == jnp.round(total_charge,3)).all()
+        return return_array 
+    else:
+        raise Exception("Not a viable init method in function get_init_charges().")
 ###############################################################################
 
 def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
@@ -238,13 +264,4 @@ def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
 
 
 if __name__ == "__main__":
-    h_dim = 126
-    e_dim = 126
-    path = "data/SrTiO3_500.db"
-    n_elems = 3
-    preprocessed_dict = get_init_crystal_states(path, SAMPLE_SIZE = 100)
-    natom=105
-    descriptors = preprocessed_dict["descriptors"]
-    test = jnp.tile(jnp.expand_dims(descriptors,axis=2),(1,1,natom,1))
-    # print(preprocessed_dict["cutoff_mask"]-np.transpose(preprocessed_dict["cutoff_mask"], axes=[0,2,1])==np.zeros(preprocessed_dict["cutoff_mask"].shape).all())
-    print("Something")
+    pass
