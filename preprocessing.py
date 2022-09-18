@@ -5,27 +5,30 @@ import jax.numpy as jnp
 import functools
 import tqdm.auto
 import typing
+import os
+import json
 
-SORTED_ELEMENTS = sorted(["Sr", "Ti", "O"])
+# Symbol Map and 
+# SORTED_ELEMENTS = sorted(["Sr", "Ti", "O"])
 
-# This is the element-to-type map used for generating the descriptors, which
-# determines the order of the descriptor vector for each atom.
-SYMBOL_MAP = {s: i for i, s in enumerate(SORTED_ELEMENTS)}
+# # This is the element-to-type map used for generating the descriptors, which
+# # determines the order of the descriptor vector for each atom.
+# SYMBOL_MAP = {s: i for i, s in enumerate(SORTED_ELEMENTS)}
 
-type_to_AN_dict = {
-    0: 8,
-    1: 38,
-    2: 22
-}
+# type_to_AN_dict = {
+#     0: 8,
+#     1: 38,
+#     2: 22
+# }
 
-# 65 Oxygen atoms
-# 15 Strontium atoms
-# 25 Titanium atoms
-type_to_charges_dict = {
-    0: np.float64(-1.15),
-    1: np.float64(1.83),
-    2: np.float64(1.892)
-}
+# # 65 Oxygen atoms
+# # 15 Strontium atoms
+# # 25 Titanium atoms
+# type_to_charges_dict = {
+#     0: np.float64(-1.15),
+#     1: np.float64(1.83),
+#     2: np.float64(1.892)
+# }
 
 ##############################################################################
 
@@ -130,6 +133,7 @@ def get_init_charges(element_array: jnp.array,
     if init_method == "specific":
         return_array = np.vectorize(charge_dict.get)(element_array)
         assert (jnp.round(jnp.sum(return_array,axis=1),3) == jnp.round(total_charge.astype(jnp.float32),3)).all()
+
         return return_array 
     else:
         raise Exception("Not a viable init method in function get_init_charges().")
@@ -168,6 +172,8 @@ def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
                             edge_encoding_dim = 126,
                             eta = 2.0, # gaussian encoding variable
                             SAMPLE_SIZE = None,
+                            init_type = "specific",
+                            formula = "SrTiO3",
                             ):
     """ Returns preprocessed important data from the crystal database.
 
@@ -185,6 +191,15 @@ def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
             - "positions": positions of all atoms (batchsize x n_atom x 3)
             - "distances": pairwise distances between all atoms (batchsize x n_atom x n_atom)
     """
+    try:
+        with open (os.getcwd()+"/presets.json") as f:
+            presets = json.load(f)
+            presets = presets[formula]
+    except:
+        raise ValueError(f"Formula {formula} not found in presets.json.")
+    path = presets["path"]
+    type_to_charges_dict = {int(k):v for k,v in presets["charge_map"].items()}
+    SYMBOL_MAP = presets["symbol_map"]
     # Other Variables
     ETA = 2.0 # Gaussian Variable
     # These labels identify each individual configuration in the larger
@@ -245,7 +260,7 @@ def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
     return_dict["total_charges"] = jnp.zeros(SAMPLE_SIZE)
     # This can be changed to "average", so all charges are initialized as 0.0
     return_dict["init_charges"] = get_init_charges(types,
-                                                    "specific",
+                                                    init_type,
                                                     type_to_charges_dict,
                                                     return_dict["total_charges"])
     return_dict["positions"] = positions

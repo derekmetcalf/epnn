@@ -6,17 +6,20 @@ import functools
 import tqdm.auto
 import typing
 import math
-from preprocessing import get_cutoff_mask, get_init_charges,get_init_charges_single, get_gaussian_distance_encodings, v_center_at_atoms_diagonal, type_to_charges_dict, SYMBOL_MAP
+from preprocessing import get_cutoff_mask, get_init_charges,get_init_charges_single, get_gaussian_distance_encodings, v_center_at_atoms_diagonal
+import json
+import os
 
-def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
-                            distance_encoding_type = "root", # ["log1","root","none"] 
+def get_init_crystal_states(distance_encoding_type = "root", # ["log1","root","none"] 
                             r_switch = 1.0,
                             r_cut = 1.5,
                             edge_encoding_dim = 126,
                             eta = 2.0, # gaussian encoding variable
                             SAMPLE_SIZE = None,
+                            init_type = "specific",
+                            formula = "SrTiO3",
                             ):
-    """ Returns preprocessed important data from the crystal database.
+    """ Returns preprocessed relevant data from the crystal database.
 
     Input:
         - filepath: Filepath to database
@@ -32,9 +35,23 @@ def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
             - "positions": positions of all atoms (batchsize x n_atom x 3)
             - "distances": pairwise distances between all atoms (batchsize x n_atom x n_atom)
     """
-    # These labels identify each individual configuration in the larger
-    # database this small subsample was extracted from.
-    ind_labels = []
+    if formula == "C30H120N30O45":
+        N_ATOMS_CATION = 11
+        N_ATOMS_ANION = 4
+        # all_atom_charges = collections.defaultdict(list)
+        # all_cation_charges = []
+        # all_anion_charges = []
+        # Reading relevant data from presets file.
+    try:
+        with open (os.getcwd()+"/presets.json") as f:
+            presets = json.load(f)
+            presets = presets[formula]
+    except:
+        raise ValueError(f"Formula {formula} not found in presets.json.")
+    path = presets["path"]
+    type_to_charges_dict = {int(k):v for k,v in presets["charge_map"].items()}
+    SYMBOL_MAP = presets["symbol_map"]
+    
     # Atom type, from 0 to n_types - 1.
     types = []
     # In case we want to use them for the electron-passing NN.
@@ -61,12 +78,38 @@ def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
 
     with ase.db.connect(path) as db:
         for idx, row in enumerate(tqdm.auto.tqdm(db.select(), total=db.count())):
-            ind_labels.append(row["ind_label"])
             descriptors.append(row["data"]["bessel_descriptors"])
             charges.append(row["data"]["ddec6_charges"])
 
             atoms = row.toatoms()
             symbols = atoms.get_chemical_symbols()
+            if formula == "C30H120N30O45":
+                n_pairs = len(symbols) // (N_ATOMS_CATION + N_ATOMS_ANION)
+                extended_symbols = []
+                for i, s in enumerate(symbols):
+                    if s == "N":
+                        if i < n_pairs * N_ATOMS_CATION:
+                            extended_symbols.append("N_cation")
+                        else:
+                            extended_symbols.append("N_anion")
+                    else:
+                        extended_symbols.append(s)
+                symbols = extended_symbols
+
+                # for (s, c) in zip(symbols, charges[-1]):
+                #     all_atom_charges[s].append(c)
+                # cation_charges = (
+                #     charges[-1][: N_ATOMS_CATION * n_pairs]
+                #     .reshape((-1, N_ATOMS_CATION))
+                #     .sum(axis=1)
+                # )
+                # all_cation_charges.extend(cation_charges.tolist())
+                # anion_charges = (
+                #     charges[-1][N_ATOMS_CATION * n_pairs :]
+                #     .reshape((-1, N_ATOMS_ANION))
+                #     .sum(axis=1)
+                # )
+                # all_anion_charges.extend(anion_charges.tolist())
             types.append([SYMBOL_MAP[s] for s in symbols])
             atomic_numbers.append(atoms.get_atomic_numbers())
             positions.append(atoms.get_positions())
@@ -82,20 +125,21 @@ def get_init_crystal_states(path: str = "data/SrTiO3_500.db",
     positions = jnp.asarray(positions)
     types = jnp.asarray(types)
     gt_charges = jnp.asarray(charges)
-    total_charges = jnp.zeros(SAMPLE_SIZE)
+    total_charges = jnp.repeat(jnp.float32(presets["total_charge"]), SAMPLE_SIZE)
     natom = positions.shape[1]
     
     # This can be changed to "average", so all charges are initialized as 0.0
     init_charges = get_init_charges(types,
-                                    "specific",
+                                    init_type,
                                     type_to_charges_dict,
                                     total_charges)
     init_charges = jnp.expand_dims(init_charges,axis=-1)
 
 
     cell_size = np.array(cell_size)
-    # Run this as cell size of z-axis is irrelevant
-    cell_size[2,2]=0.0
+    if formula == "SrTiO3":
+        # Run this as cell size of z-axis is irrelevant
+        cell_size[2,2]=0.0
     cell_size = jnp.array(cell_size)
     distances = v_center_at_atoms_diagonal(positions,jnp.repeat(jnp.diag(cell_size)[jnp.newaxis,:],SAMPLE_SIZE, axis=0))
     cutoff_mask = get_cutoff_mask(batched_distances = distances, R_SWITCH = r_switch, R_CUT = r_cut)
@@ -122,6 +166,8 @@ def get_init_crystal_states_single(
                             edge_encoding_dim = 24,
                             eta = 2.0, # gaussian encoding variable
                             SAMPLE_SIZE = None,
+                            init_type = "specific",
+                            formula = "SrTiO3",
                             ):
     """ Returns preprocessed important data from the crystal database.
 
@@ -148,6 +194,20 @@ def get_init_crystal_states_single(
     ####### Stuff to run before function!
     #####################################
     #####################################
+    # Reading relevant data from presets file.
+    try:
+        with open (os.getcwd()+"/presets.json") as f:
+            presets = json.load(f)
+            presets = presets[formula]
+    except:
+        raise ValueError(f"Formula {formula} not found in presets.json.")
+    path = presets["path"]
+    type_to_charges_dict = {int(k):v for k,v in presets["charge_map"].items()}
+    SYMBOL_MAP = presets["symbol_map"]
+    total_charge = float(presets["total_charge"])
+
+
+
     cell_size = np.array(cell_size)
     # Run this as cell size of z-axis is irrelevant
     cell_size[2,2]=0.0
@@ -156,12 +216,11 @@ def get_init_crystal_states_single(
     # Descriptor tensors are reshaped to flatten to bessel descriptors
     descriptors = descriptors.reshape(*descriptors.shape[:2],-1)
     types = jnp.asarray(types)
-    total_charge = 0.
     natom = positions.shape[1]
     
     # This can be changed to "average", so all charges are initialized as 0.0
     init_charges = get_init_charges_single(types,
-                                    "specific",
+                                    init_type,
                                     type_to_charges_dict,
                                     total_charge)
     init_charges = jnp.expand_dims(init_charges,axis=-1)
@@ -180,13 +239,14 @@ def get_init_crystal_states_single(
 
 
 if __name__ == "__main__":
-    h_dim = 126
-    e_dim = 126
-    path = "data/SrTiO3_500.db"
-    n_elems = 3
-    preprocessed_dict = get_init_crystal_states(path, SAMPLE_SIZE = 100)
-    natom=105
-    descriptors = preprocessed_dict["descriptors"]
-    test = jnp.tile(jnp.expand_dims(descriptors,axis=2),(1,1,natom,1))
-    print(preprocessed_dict["cutoff_mask"]-np.transpose(preprocessed_dict["cutoff_mask"], axes=[0,2,1])==np.zeros(preprocessed_dict["cutoff_mask"].shape).all())
-    print("Something")
+    pass
+    # h_dim = 126
+    # e_dim = 126
+    # path = "data/SrTiO3_500.db"
+    # n_elems = 3
+    # preprocessed_dict = get_init_crystal_states(path, SAMPLE_SIZE = 100)
+    # natom=105
+    # descriptors = preprocessed_dict["descriptors"]
+    # test = jnp.tile(jnp.expand_dims(descriptors,axis=2),(1,1,natom,1))
+    # print(preprocessed_dict["cutoff_mask"]-np.transpose(preprocessed_dict["cutoff_mask"], axes=[0,2,1])==np.zeros(preprocessed_dict["cutoff_mask"].shape).all())
+    # print("Something")
