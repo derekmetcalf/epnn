@@ -6,7 +6,7 @@ import functools
 import tqdm.auto
 import typing
 import math
-from preprocessing import get_cutoff_mask, get_init_charges,get_init_charges_single, get_gaussian_distance_encodings, v_center_at_atoms_diagonal
+from preprocessing_base import get_cutoff_mask, get_init_charges,get_init_charges_single, get_gaussian_distance_encodings, v_center_at_atoms_diagonal
 import json
 import os
 

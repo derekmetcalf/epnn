@@ -8,7 +8,7 @@ import jax.numpy as jnp
 from tensorflow.keras import Model
 from tensorflow.keras.layers import Dense
 from sklearn.model_selection import train_test_split
-import preprocessing
+import preprocessing_base
 
 atom_num_dict = {'O': 6, 'Sr': 38, 'Ti': 22}
 elem_dict = {'O': 0, 'Sr': 1, 'Ti': 2}
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     # y: Ground truth: labels to predict (charges for each atom) (nbatch x natom x 1)
     # mask: 
     # x, h, q, e, Q, y, mask, names = get_init_crystal_states(path)
-    preprocessed_dict = preprocessing.get_init_crystal_states(path, edge_encoding_dim = e_dim, SAMPLE_SIZE = None) # Change sample size to None if all samples should be read.
+    preprocessed_dict = preprocessing_base.get_init_crystal_states(path, edge_encoding_dim = e_dim, SAMPLE_SIZE = None) # Change sample size to None if all samples should be read.
     natom = preprocessed_dict["natom"]
     # # x is a concatenation of element numbers and one-hot-encoded element type
     # x = jnp.tile(jnp.expand_dims(jnp.concatenate([jnp.expand_dims(preprocessed_dict["atomic_numbers"],axis=-1),preprocessed_dict["ohe_types"]],axis=2),axis=2),(1,1,natom,1))

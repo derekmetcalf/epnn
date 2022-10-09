@@ -243,6 +243,7 @@ def train_single_model(E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, FEATURES,
                                                                                     LR = LR,
                                                                                     WEIGHT_DECAY = WEIGHT_DECAY
                                                                                     )
+        model_results["index"] = CURRENT_INDEX
         batches["types"] = types
         if result_table.index.isin([CURRENT_INDEX]).any():
             result_table.loc[CURRENT_INDEX] = performance_results["time_taken"], performance_results["test_rmse"], performance_results["test_mae"], list(performance_results["step_list"]), list(performance_results["rmse_list_val"]), performance_results["best_val_rmse"]
