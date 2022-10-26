@@ -9,6 +9,18 @@ import haiku as hk
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
 def create_implicitly_batched_graphsTuple_with_encoded_distances(descriptors, distances, distances_encoded, init_charges, types, cutoff_mask, cutoff = 3.0):
+    """Create jraph GraphTuples with encoded distances
+    Input: 
+        -   descriptors: jnp.array (n_samples, n_atom, h_dim) -> Bessel descriptors
+        -   distances: jnp.array (n_samples, n_atom, n_atom)  -> distances between atoms
+        -   distances_encoded: jnp.array (n_samples, n_atom, n_atom, e_dim) -> encoded distances between atoms
+        -   init_charges: jnp.array (n_samples, n_atom) -> initial charges for all atoms
+        -   types: jnp.array (n_samples, n_atom) -> integer types for all atoms
+        -   cutoff_mask: jnp.array (n_samples, n_atom, n_atom)  -> cutoff mask for node & edge effects in message passing
+        -   cutoff: float -> cutoff value where distances are too large to be used.
+    Output:
+        - implicitly batched jraph.GraphTuple
+    """
     batch_size = descriptors.shape[0]
     natom = descriptors.shape[1]
     # Reshaping the descriptors to go over the whole batch
@@ -57,12 +69,28 @@ def aggregate_edges_for_nodes_fn(edges: jnp.array,
                                 receivers: jnp.array,
                                 cutoff_mask: jnp.array,
                                 n_nodes: int) -> jnp.array:
+  """Aggregation function for message passing algorithm
+  Input: 
+    -   edges: jnp.array (n_samples, n_edges) -> encodings for edges
+    -   receivers: jnp.array -> indices for edges that are receivers
+    -   cutoff_mask: jnp.array (n_samples, n_atom, n_atom)  -> cutoff mask for node & edge effects in message passing
+    -   n_nodes: int -> number of nodes that are summed over
+  Output:
+    - implicitly batched jraph.GraphTuple
+  """
   # multiply edges with the cutoff mask
   edges = jnp.multiply(edges,cutoff_mask)
   # sum edge embedding values over each receiver node
   return jax.ops.segment_sum(edges,receivers,n_nodes)
 
 def create_model(features, activation):
+  """ Model creation with correct activation function
+  Input: 
+    -   features: [array] -> An array of dimensions for the underlying neural network. It needs to end with 1, but you can increase the complexity to improve model performance.
+    -   activation: [“relu”,”switch”] Two different activation functions to choose from.
+  Output:
+    - MLP model from haiku library
+  """
   if activation == "swish":
     gep_layer = GraphElectronPassing(
       aggregate_edges_for_nodes_fn=aggregate_edges_for_nodes_fn,
@@ -77,6 +105,7 @@ def create_model(features, activation):
 
 
 class MLP_haiku(hk.Module):
+  """ MLP haiku model with feature vector as input and relu function as activation."""
   def __init__(self, features: jnp.ndarray):
     super().__init__()
     self.features = features
@@ -91,6 +120,7 @@ class MLP_haiku(hk.Module):
     return mlp(x)
 
 class MLP_haiku_swish(hk.Module):
+  """ MLP haiku model with feature vector as input and swish function as activation."""
   def __init__(self, features: jnp.ndarray):
     super().__init__()
     self.features = features
@@ -110,12 +140,12 @@ def GraphElectronPassing(aggregate_edges_for_nodes_fn: Callable,
                         h_dim: int = 129) -> Callable:
   """
   Args:
-    update_node_fn: function used to update the nodes. In the paper a single
-      layer MLP is used.
     aggregate_edges_for_nodes_fn: function used to aggregates the sender nodes.
+    MLP: model to use as multilayer perceptron
+    h_dim: embedding dimension for bessel descriptors
 
   Returns:
-    A method that applies a Graph Convolution layer.
+    jraph Model
   """
 
   def _ApplyGEP(graph: jraph.GraphsTuple) -> jraph.GraphsTuple:
