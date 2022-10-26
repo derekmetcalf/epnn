@@ -78,7 +78,7 @@ Visualization plots ground truth charges against predicted charges.
 ## 7.	Run inference with the function *infer()*.
 Inference is batched so you do not have to worry about a dataset that is too large. With max_batch_size you can decrease the batch-size to a number that works with your VRAM. 
 
-**Input: **
+**Input:**
 -	model_path: str -> Path to the saved model.
 -	db_path [optional]: str -> Path to data to infer. Should be similar to data the model was trained on!
 -	formula: str -> Formula of the chemical compound.
