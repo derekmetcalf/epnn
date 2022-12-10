@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 import pickle
 import dill
+from copy import deepcopy
+
 
 def run_model_with_hyperparameters(E_DIM : int,
                                   R_SWITCH : float,
@@ -24,7 +26,8 @@ def run_model_with_hyperparameters(E_DIM : int,
                                   INITS : tuple,
                                   FORMULA = "SrTiO3",
                                   LR = 1e-03,
-                                  WEIGHT_DECAY = 1e-04
+                                  WEIGHT_DECAY = 1e-04,
+                                  ETA = 2.0
                                   ):
     """Run the model training with selected hyperparameters and initial data.
     Input: 
@@ -65,10 +68,10 @@ def run_model_with_hyperparameters(E_DIM : int,
                     "true_labels_val"
                     "true_labels_test"
     """
-    CURRENT_INDEX = (E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY)
+    CURRENT_INDEX = (E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY, ETA)
     warnings.simplefilter(action='ignore', category=FutureWarning)
     key, subkey = random.split(random.PRNGKey(0))
-    descriptors, distances, distances_encoded, init_charges, gt_charges, cutoff_mask, types = INITS
+    descriptors, distances, distances_encoded, init_charges, gt_charges, cutoff_mask, types, ohe_types = INITS
     #######################################
     ### Creating batches for training #####
     total_size = descriptors.shape[0]
@@ -86,13 +89,16 @@ def run_model_with_hyperparameters(E_DIM : int,
     test_idx = permuted_idx[-test_size:]
     val_idx = permuted_idx[-2*test_size:-test_size]
     train_idxs = jnp.array(jnp.split(permuted_idx[:-2*test_size],int(jnp.ceil(train_size/train_batch_size))))
-    train_batches = [create_implicitly_batched_graphsTuple_with_encoded_distances(descriptors[train_idx],distances[train_idx], distances_encoded[train_idx],init_charges[train_idx], types[train_idx], cutoff_mask[train_idx], R_CUT) for train_idx in train_idxs]
-    val_batch = create_implicitly_batched_graphsTuple_with_encoded_distances(descriptors[val_idx],distances[val_idx], distances_encoded[val_idx],init_charges[val_idx],types[val_idx],cutoff_mask[val_idx], R_CUT)
-    test_batch = create_implicitly_batched_graphsTuple_with_encoded_distances(descriptors[test_idx],distances[test_idx], distances_encoded[test_idx],init_charges[test_idx],types[test_idx],cutoff_mask[test_idx], R_CUT)
+    train_batches = [create_implicitly_batched_graphsTuple_with_encoded_distances(descriptors[train_idx],distances[train_idx], distances_encoded[train_idx],init_charges[train_idx], ohe_types[train_idx], cutoff_mask[train_idx], R_CUT) for train_idx in train_idxs]
+    val_batch = create_implicitly_batched_graphsTuple_with_encoded_distances(descriptors[val_idx],distances[val_idx], distances_encoded[val_idx],init_charges[val_idx],ohe_types[val_idx],cutoff_mask[val_idx], R_CUT)
+    test_batch = create_implicitly_batched_graphsTuple_with_encoded_distances(descriptors[test_idx],distances[test_idx], distances_encoded[test_idx],init_charges[test_idx],ohe_types[test_idx],cutoff_mask[test_idx], R_CUT)
 
-
+    if FORMULA == "SrTiO3":
+        n_types = 3
+    else:
+        n_types = 5
     # create the model
-    gep_layer = create_model(FEATURES,ACTIVATION)
+    gep_layer = create_model(FEATURES,ACTIVATION, n_types)
     ################################
     model = hk.without_apply_rng(hk.transform(gep_layer))
     params = model.init(jax.random.PRNGKey(42), train_batches[0])
@@ -216,76 +222,86 @@ def run_grid_hyperparam_pipeline(DEFAULT_DICT : dict,
 
         Output: None (but results are saved in result list in /results)
         """
-    all_params = ["E_DIM","R_SWITCH","R_CUT","DISTANCE_ENCODING_TYPE","FEATURES","NUM_PASSES","ACTIVATION","N_EPOCHS","LR","WEIGHT_DECAY"] 
+    DEFAULT_DICT = deepcopy(DEFAULT_DICT)
+    OPTIM_DICT = deepcopy(OPTIM_DICT)
+    all_params = ["E_DIM","R_SWITCH","R_CUT","DISTANCE_ENCODING_TYPE","FEATURES","NUM_PASSES","ACTIVATION","N_EPOCHS","LR","WEIGHT_DECAY","ETA"] 
     for key in OPTIM_DICT.keys():
             assert key in DEFAULT_DICT.keys()
     for param_name in all_params:
         DEFAULT_DICT[param_name] = [DEFAULT_DICT[param_name]]
+    
     DEFAULT_DICT.update(OPTIM_DICT)
     print(DEFAULT_DICT)
 
     
+    result_table = pd.read_csv(f"results/result_table_{FORMULA}.csv").set_index(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd","eta"])
+    if "Unnamed: 0" in result_table.columns:
+        result_table = result_table.drop("Unnamed: 0", axis=1)
     # Run through all hyperparameter configurations
     for E_DIM in DEFAULT_DICT["E_DIM"]:
         for R_SWITCH in DEFAULT_DICT["R_SWITCH"]:
             for R_CUT in DEFAULT_DICT["R_CUT"]:
                 for DISTANCE_ENCODING_TYPE in DEFAULT_DICT["DISTANCE_ENCODING_TYPE"]:
-                    # check if planned indices are already in the results
-                    check_if_available = False
-                    result_table = pd.read_csv(f"results/result_table_{FORMULA}.csv").set_index(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd"])
-                    for FEATURES in DEFAULT_DICT["FEATURES"]:
-                        for NUM_PASSES in DEFAULT_DICT["NUM_PASSES"]:
-                            for ACTIVATION in DEFAULT_DICT["ACTIVATION"]:
-                                for N_EPOCHS in DEFAULT_DICT["N_EPOCHS"]:
-                                    for LR in DEFAULT_DICT["LR"]:
-                                        for WEIGHT_DECAY in DEFAULT_DICT["WEIGHT_DECAY"]:
-                                            CURRENT_INDEX = (E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY)
-                                            if (not OVERWRITE) and result_table.index.isin([CURRENT_INDEX]).any():
-                                                    print(f"NO OVERWRITE: Results already in Dataframe for Index {CURRENT_INDEX}.")
-                                                    check_if_available = True
-                    if check_if_available:
-                        continue
-                    else:
-                        # only run preprocessing if results are not available for this combination of hyperparameters
-                        inits = get_init_crystal_states(edge_encoding_dim = E_DIM, SAMPLE_SIZE = None, r_switch = R_SWITCH, r_cut = R_CUT, distance_encoding_type = DISTANCE_ENCODING_TYPE, formula = FORMULA)
+                    for ETA in DEFAULT_DICT["ETA"]:
+                        # check if planned indices are already in the results
+                        check_if_available = []
                         for FEATURES in DEFAULT_DICT["FEATURES"]:
                             for NUM_PASSES in DEFAULT_DICT["NUM_PASSES"]:
                                 for ACTIVATION in DEFAULT_DICT["ACTIVATION"]:
                                     for N_EPOCHS in DEFAULT_DICT["N_EPOCHS"]:
                                         for LR in DEFAULT_DICT["LR"]:
                                             for WEIGHT_DECAY in DEFAULT_DICT["WEIGHT_DECAY"]:
-                                                CURRENT_INDEX = (E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY)
-                                                result_table = pd.read_csv(f"results/result_table_{FORMULA}.csv").set_index(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd"])
-
+                                                CURRENT_INDEX = (E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY, ETA)
                                                 if (not OVERWRITE) and result_table.index.isin([CURRENT_INDEX]).any():
-                                                    print(f"NO OVERWRITE: Results already in Dataframe for Index {CURRENT_INDEX}.")
+                                                        print(f"NO OVERWRITE: Results already in Dataframe for Index {CURRENT_INDEX}.")
+                                                        check_if_available.append(True)
                                                 else:
-                                                    types = inits[-1] 
-                                                    # Change sample size to None if all samples should be read.
-                                                    model_results, performance_results, batches = run_model_with_hyperparameters(E_DIM = E_DIM,
-                                                                                                                                R_SWITCH=R_SWITCH,
-                                                                                                                                R_CUT=R_CUT,
-                                                                                                                                DISTANCE_ENCODING_TYPE=DISTANCE_ENCODING_TYPE,
-                                                                                                                                FEATURES=FEATURES,
-                                                                                                                                NUM_PASSES=NUM_PASSES,
-                                                                                                                                ACTIVATION=ACTIVATION,
-                                                                                                                                N_EPOCHS=N_EPOCHS,
-                                                                                                                                INITS=inits,
-                                                                                                                                FORMULA = FORMULA,
-                                                                                                                                LR = LR,
-                                                                                                                                WEIGHT_DECAY = WEIGHT_DECAY
-                                                                                                                                )
-                                                    batches["types"] = types
-                                                    if result_table.index.isin([CURRENT_INDEX]).any():
-                                                        result_table.loc[CURRENT_INDEX] = performance_results["time_taken"], performance_results["test_rmse"], performance_results["test_mae"], list(performance_results["step_list"]), list(performance_results["rmse_list_val"]), performance_results["best_val_rmse"]
+                                                    print(f"Result not there yet: {CURRENT_INDEX}.")
+                                                    check_if_available.append(False)
+                        if all(check_if_available):
+                            continue
+                        else:
+                            # only run preprocessing if results are not available for this combination of hyperparameters
+                            inits = get_init_crystal_states(edge_encoding_dim = E_DIM, SAMPLE_SIZE = None, r_switch = R_SWITCH, r_cut = R_CUT, distance_encoding_type = DISTANCE_ENCODING_TYPE, formula = FORMULA, eta = ETA)
+                            for FEATURES in DEFAULT_DICT["FEATURES"]:
+                                for NUM_PASSES in DEFAULT_DICT["NUM_PASSES"]:
+                                    for ACTIVATION in DEFAULT_DICT["ACTIVATION"]:
+                                        for N_EPOCHS in DEFAULT_DICT["N_EPOCHS"]:
+                                            for LR in DEFAULT_DICT["LR"]:
+                                                for WEIGHT_DECAY in DEFAULT_DICT["WEIGHT_DECAY"]:
+                                                    CURRENT_INDEX = (E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY, ETA)
+                                                    if (not OVERWRITE) and result_table.index.isin([CURRENT_INDEX]).any():
+                                                        print(f"NO OVERWRITE: Results already in Dataframe for Index {CURRENT_INDEX}.")
                                                     else:
-                                                        result_table = result_table.reset_index().append(dict(zip(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd","time_needed","test_rmse","test_mae","steps","val_rmses", "best_val_rmse"],[E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY, performance_results["time_taken"], performance_results["test_rmse"], performance_results["test_mae"], list(performance_results["step_list"]), list(performance_results["rmse_list_val"]), performance_results["best_val_rmse"]])), ignore_index = True).set_index(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd"])
-                                                    print("Best-Val-RMSE:",performance_results["best_val_rmse"])
-                                                    result_table.to_csv(f"results/result_table_{FORMULA}.csv")
+                                                        print(f"Run model with index {CURRENT_INDEX}")
+                                                        time.sleep(2)
+                                                        types = inits[-2] 
+                                                        # Change sample size to None if all samples should be read.
+                                                        model_results, performance_results, batches = run_model_with_hyperparameters(E_DIM = E_DIM,
+                                                                                                                                    R_SWITCH=R_SWITCH,
+                                                                                                                                    R_CUT=R_CUT,
+                                                                                                                                    DISTANCE_ENCODING_TYPE=DISTANCE_ENCODING_TYPE,
+                                                                                                                                    FEATURES=FEATURES,
+                                                                                                                                    NUM_PASSES=NUM_PASSES,
+                                                                                                                                    ACTIVATION=ACTIVATION,
+                                                                                                                                    N_EPOCHS=N_EPOCHS,
+                                                                                                                                    INITS=inits,
+                                                                                                                                    FORMULA = FORMULA,
+                                                                                                                                    LR = LR,
+                                                                                                                                    WEIGHT_DECAY = WEIGHT_DECAY,
+                                                                                                                                    ETA = ETA
+                                                                                                                                    )
+                                                        batches["types"] = types
+                                                        if result_table.index.isin([CURRENT_INDEX]).any():
+                                                            result_table.loc[CURRENT_INDEX] = performance_results["time_taken"], performance_results["test_rmse"], performance_results["test_mae"], list(performance_results["step_list"]), list(performance_results["rmse_list_val"]), performance_results["best_val_rmse"]
+                                                        else:
+                                                            result_table = result_table.reset_index().append(dict(zip(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd","eta","time_needed","test_rmse","test_mae","steps","val_rmses", "best_val_rmse"],[E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY,ETA, performance_results["time_taken"], performance_results["test_rmse"], performance_results["test_mae"], list(performance_results["step_list"]), list(performance_results["rmse_list_val"]), performance_results["best_val_rmse"]])), ignore_index = True).set_index(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd","eta"])
+                                                        print("Best-Val-RMSE:",performance_results["best_val_rmse"])
+                                                        result_table.to_csv(f"results/result_table_{FORMULA}.csv")
     
 
 
-def train_single_model(E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, FEATURES, NUM_PASSES, ACTIVATION, N_EPOCHS, OVERWRITE = True, FORMULA = "SrTiO3", SAVE_MODEL = False, SAMPLE_SIZE = None, LR = 1e-3,WEIGHT_DECAY = 1e-4):
+def train_single_model(E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, FEATURES, NUM_PASSES, ACTIVATION, N_EPOCHS, OVERWRITE = True, FORMULA = "SrTiO3", SAVE_MODEL = False, SAMPLE_SIZE = None, LR = 1e-3,WEIGHT_DECAY = 1e-4, ETA = 2.0):
     """Train a single model with selected hyperparameters.
     Input: 
         -   E_DIM [int]: Number of embedding dimensions for the edges
@@ -322,15 +338,17 @@ def train_single_model(E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, FEATURES,
     """
     
     assert SAVE_MODEL == OVERWRITE or SAVE_MODEL == False
-    CURRENT_INDEX = (E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY)
-    result_table = pd.read_csv(f"results/result_table_{FORMULA}.csv").set_index(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd"])
+    CURRENT_INDEX = (E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY, ETA)
+    result_table = pd.read_csv(f"results/result_table_{FORMULA}.csv").set_index(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd", "eta"])
+    if "Unnamed: 0" in result_table.columns:
+        result_table = result_table.drop("Unnamed: 0", axis=1)
 
     if (not OVERWRITE) and result_table.index.isin([CURRENT_INDEX]).any():
         print(f"NO OVERWRITE: Results already in Dataframe for Index {CURRENT_INDEX}.")
         return (None, None)
     else:
-        inits = get_init_crystal_states(edge_encoding_dim = E_DIM, SAMPLE_SIZE = SAMPLE_SIZE, r_switch = R_SWITCH, r_cut = R_CUT, distance_encoding_type = DISTANCE_ENCODING_TYPE, formula = FORMULA) #
-        types = inits[-1] 
+        inits = get_init_crystal_states(edge_encoding_dim = E_DIM, SAMPLE_SIZE = SAMPLE_SIZE, r_switch = R_SWITCH, r_cut = R_CUT, distance_encoding_type = DISTANCE_ENCODING_TYPE, formula = FORMULA, eta = ETA) #
+        types = inits[-2] 
         # Change sample size to None if all samples should be read.
         model_results, performance_results, batches = run_model_with_hyperparameters(E_DIM = E_DIM,
                                                                                     R_SWITCH=R_SWITCH,
@@ -343,14 +361,15 @@ def train_single_model(E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, FEATURES,
                                                                                     INITS=inits,
                                                                                     FORMULA = FORMULA,
                                                                                     LR = LR,
-                                                                                    WEIGHT_DECAY = WEIGHT_DECAY
+                                                                                    WEIGHT_DECAY = WEIGHT_DECAY,
+                                                                                    ETA = ETA
                                                                                     )
         model_results["index"] = CURRENT_INDEX
         batches["types"] = types
         if result_table.index.isin([CURRENT_INDEX]).any():
             result_table.loc[CURRENT_INDEX] = performance_results["time_taken"], performance_results["test_rmse"], performance_results["test_mae"], list(performance_results["step_list"]), list(performance_results["rmse_list_val"]), performance_results["best_val_rmse"]
         else:
-            result_table = result_table.reset_index().append(dict(zip(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd","time_needed","test_rmse","test_mae","steps","val_rmses", "best_val_rmse"],[E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY, performance_results["time_taken"], performance_results["test_rmse"], performance_results["test_mae"], list(performance_results["step_list"]), list(performance_results["rmse_list_val"]), performance_results["best_val_rmse"]])), ignore_index = True).set_index(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd"])
+            result_table = result_table.reset_index().append(dict(zip(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd","eta","time_needed","test_rmse","test_mae","steps","val_rmses", "best_val_rmse"],[E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, str(FEATURES), NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY, ETA, performance_results["time_taken"], performance_results["test_rmse"], performance_results["test_mae"], list(performance_results["step_list"]), list(performance_results["rmse_list_val"]), performance_results["best_val_rmse"]])), ignore_index = True).set_index(["e_dim","r_switch","r_cut","distance_encoding_type","features","num_passes","activation_fn","n_epochs","lr","wd","eta"])
         print("Best-Val-RMSE:",performance_results["best_val_rmse"])
         result_table.to_csv(f"results/result_table_{FORMULA}.csv")
         if SAVE_MODEL:

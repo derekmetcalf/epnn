@@ -144,8 +144,8 @@ def get_init_crystal_states(distance_encoding_type = "root", # ["log1","root","n
                                     type_to_charges_dict,
                                     total_charges)
     init_charges = jnp.expand_dims(init_charges,axis=-1)
-
-
+    ohe_types = onehot_initialization(types)
+    ohe_types = jnp.asarray(ohe_types)
     cell_size = np.array(cell_size)
     if formula == "SrTiO3":
         # Run this as cell size of z-axis is irrelevant
@@ -159,7 +159,110 @@ def get_init_crystal_states(distance_encoding_type = "root", # ["log1","root","n
         distances_encoded = get_gaussian_distance_encodings(batched_distances = jnp.sqrt(distances), ETA = eta, R_CUT = math.sqrt(r_cut), dim_encoding = edge_encoding_dim)
     else:
         distances_encoded = get_gaussian_distance_encodings(batched_distances = distances, ETA = eta, R_CUT = r_cut, dim_encoding = edge_encoding_dim)
-    return descriptors, distances, distances_encoded, init_charges, gt_charges, cutoff_mask, types
+    return descriptors, distances, distances_encoded, init_charges, gt_charges, cutoff_mask, types, ohe_types
+
+
+
+def get_init_charges_for_comparison(
+                            path,
+                            init_type = "specific",
+                            formula = "SrTiO3",
+                            ):
+    """ Returns preprocessed relevant data from the crystal database.
+
+    Input:
+        - path: Filepath to database
+        - ground_truth_available: True if we have ground_truth information for charges in the database
+        - SAMPLE_SIZE: [int] -> How many samples from the database shall be used for training, "None" equals all data.
+        - init_type: str -> either 'specific' or 'average'. 
+            'specific' means that each element has a specific init charge dependent on the graphics sent from Jésus.
+            'average' means that the total charge is just divided by the number of atoms. As the total charge is 0, it would just return an array full of zeroes.
+        - formula: [str] Formula of the chemical compound
+    Output:
+        - Tuple with variables:
+            -   descriptors: jnp.array (n_samples, n_atom, h_dim) -> Bessel descriptors
+            -   distances: jnp.array (n_samples, n_atom, n_atom)  -> distances between atoms
+            -   distances_encoded: jnp.array (n_samples, n_atom, n_atom, e_dim) -> encoded distances between atoms
+            -   init_charges: jnp.array (n_samples, n_atom) -> initial charges for all atoms
+            -   gt_charges [optional]: jnp.array (n_samples, n_atom) -> ground truth charges for all atoms
+            -   cutoff_mask: jnp.array (n_samples, n_atom, n_atom)  -> cutoff mask for node & edge effects in message passing
+            -   types: jnp.array (n_samples, n_atom) -> integer types for all atoms
+    """
+    if formula == "C30H120N30O45":
+        N_ATOMS_CATION = 11
+        N_ATOMS_ANION = 4
+        # all_atom_charges = collections.defaultdict(list)
+        # all_cation_charges = []
+        # all_anion_charges = []
+        # Reading relevant data from presets file.
+    try:
+        with open (os.getcwd()+"/presets.json") as f:
+            presets = json.load(f)
+            presets = presets[formula]
+    except:
+        raise ValueError(f"Formula {formula} not found in presets.json.")
+    type_to_charges_dict = {int(k):v for k,v in presets["charge_map"].items()}
+    SYMBOL_MAP = presets["symbol_map"]
+    
+    # Atom type, from 0 to n_types - 1.
+    types = []
+    # In case we want to use them for the electron-passing NN.
+    atomic_numbers = []
+    # Positions of each atom in each configuration, in Cartesian coordinates
+    # expressed in Å.
+    positions = []
+    # There are periodic boundary conditions in effect along the X and Y 
+    # directions. The length of the simulation box along those directions
+    # is stored in the elements [0, 0] and [1, 1] of the 3x3 matrices
+    # stored in this array. Although there is a cell matrix for each
+    # configuration, they are all the same in this case. The units are also
+    # Å. The [2, 2] element is immaterial, and the rest are zero.
+    cell_lengths = []
+    # Spherical Bessel descriptors for each atom, generated using the following
+    # parameters:
+    # N_MAX = 5
+    # R_CUT = 5.5
+    descriptors = []
+    # DDEC6 charges that we will try to predict,
+    charges = []
+
+    cell_size = np.array([])
+
+    with ase.db.connect(path) as db:
+        for idx, row in enumerate(tqdm.auto.tqdm(db.select(), total=db.count())):
+            charges.append(row["data"]["ddec6_charges"])
+            atoms = row.toatoms()
+            symbols = atoms.get_chemical_symbols()
+            if formula == "C30H120N30O45":
+                n_pairs = len(symbols) // (N_ATOMS_CATION + N_ATOMS_ANION)
+                extended_symbols = []
+                for i, s in enumerate(symbols):
+                    if s == "N":
+                        if i < n_pairs * N_ATOMS_CATION:
+                            extended_symbols.append("N_cation")
+                        else:
+                            extended_symbols.append("N_anion")
+                    else:
+                        extended_symbols.append(s)
+                symbols = extended_symbols
+            types.append([SYMBOL_MAP[s] for s in symbols])
+            atomic_numbers.append(atoms.get_atomic_numbers())
+    if not SAMPLE_SIZE:
+        SAMPLE_SIZE = idx+1
+
+    types = jnp.asarray(types)
+    gt_charges = jnp.asarray(charges)
+    total_charges = jnp.repeat(jnp.float32(presets["total_charge"]), SAMPLE_SIZE)
+
+    
+    # This can be changed to "average", so all charges are initialized as 0.0
+    init_charges = get_init_charges(types,
+                                    init_type,
+                                    type_to_charges_dict,
+                                    total_charges)
+    init_charges = jnp.expand_dims(init_charges,axis=-1)
+
+    return init_charges, gt_charges, types
 
 
 def get_init_crystal_states_for_inference(
@@ -302,7 +405,8 @@ def get_init_crystal_states_for_inference(
                                     type_to_charges_dict,
                                     total_charges)
     init_charges = jnp.expand_dims(init_charges,axis=-1)
-
+    ohe_types = onehot_initialization(types)
+    ohe_types = jnp.asarray(ohe_types)
 
     cell_size = np.array(cell_size)
     if formula == "SrTiO3":
@@ -318,9 +422,20 @@ def get_init_crystal_states_for_inference(
     else:
         distances_encoded = get_gaussian_distance_encodings(batched_distances = distances, ETA = eta, R_CUT = r_cut, dim_encoding = edge_encoding_dim)
     if ground_truth_available:
-        return descriptors, distances, distances_encoded, init_charges, gt_charges, cutoff_mask, types
+        return descriptors, distances, distances_encoded, init_charges, gt_charges, cutoff_mask, types, ohe_types
     else:
-        return descriptors, distances, distances_encoded, init_charges, cutoff_mask, types
+        return descriptors, distances, distances_encoded, init_charges, cutoff_mask, types, ohe_types
+
+def onehot_initialization(a):
+    ncols = a.max()+1
+    out = np.zeros(a.shape + (ncols,), dtype=int)
+    out[all_idx(a, axis=2)] = 1
+    return out
+
+def all_idx(idx, axis):
+    grid = np.ogrid[tuple(map(slice, idx.shape))]
+    grid.insert(axis, idx)
+    return tuple(grid)
 
 
 

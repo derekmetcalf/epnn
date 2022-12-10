@@ -8,14 +8,14 @@ import haiku as hk
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-def create_implicitly_batched_graphsTuple_with_encoded_distances(descriptors, distances, distances_encoded, init_charges, types, cutoff_mask, cutoff = 3.0):
+def create_implicitly_batched_graphsTuple_with_encoded_distances(descriptors, distances, distances_encoded, init_charges, ohe_types, cutoff_mask, cutoff = 3.0):
     """Create jraph GraphTuples with encoded distances
     Input: 
         -   descriptors: jnp.array (n_samples, n_atom, h_dim) -> Bessel descriptors
         -   distances: jnp.array (n_samples, n_atom, n_atom)  -> distances between atoms
         -   distances_encoded: jnp.array (n_samples, n_atom, n_atom, e_dim) -> encoded distances between atoms
         -   init_charges: jnp.array (n_samples, n_atom) -> initial charges for all atoms
-        -   types: jnp.array (n_samples, n_atom) -> integer types for all atoms
+        -   ohe_types: jnp.array (n_samples, n_atom) -> one-hot-encoded for all atoms
         -   cutoff_mask: jnp.array (n_samples, n_atom, n_atom)  -> cutoff mask for node & edge effects in message passing
         -   cutoff: float -> cutoff value where distances are too large to be used.
     Output:
@@ -25,6 +25,9 @@ def create_implicitly_batched_graphsTuple_with_encoded_distances(descriptors, di
     natom = descriptors.shape[1]
     # Reshaping the descriptors to go over the whole batch
     descriptors = jnp.reshape(descriptors,(batch_size*natom,descriptors.shape[2]))
+    # Adding one-hot-encoded atom types to the descriptors
+    ohe_types = jnp.reshape(ohe_types,(batch_size*natom,ohe_types.shape[2]))
+    descriptors = jnp.concatenate((descriptors,ohe_types),axis=1)
     # to calculate the number of edges for each individual graph
     distances_flattened_batchwise = jnp.reshape(distances,(batch_size,natom*natom))
     n_edges = jnp.count_nonzero(jnp.logical_and(distances_flattened_batchwise > 0, distances_flattened_batchwise < cutoff),axis=1)
@@ -83,11 +86,11 @@ def aggregate_edges_for_nodes_fn(edges: jnp.array,
   # sum edge embedding values over each receiver node
   return jax.ops.segment_sum(edges,receivers,n_nodes)
 
-def create_model(features, activation):
+def create_model(features, activation, n_types):
   """ Model creation with correct activation function
   Input: 
     -   features: [array] -> An array of dimensions for the underlying neural network. It needs to end with 1, but you can increase the complexity to improve model performance.
-    -   activation: [“relu”,”switch”] Two different activation functions to choose from.
+    -   activation: [“relu”,”swish”] Two different activation functions to choose from.
   Output:
     - MLP model from haiku library
   """
@@ -95,12 +98,16 @@ def create_model(features, activation):
     gep_layer = GraphElectronPassing(
       aggregate_edges_for_nodes_fn=aggregate_edges_for_nodes_fn,
       MLP = lambda n: MLP_haiku_swish(features=features)(n), # use swish activation MLP
+      h_dim=129+n_types
     )
-  else:
+  elif activation == "relu":
     gep_layer = GraphElectronPassing(
       aggregate_edges_for_nodes_fn=aggregate_edges_for_nodes_fn,
       MLP = lambda n: MLP_haiku(features=features)(n), # use ReLU activation MLP
+      h_dim=129+n_types
     )
+  else:
+    raise ValueError("Wrong activation function.")
   return gep_layer
 
 
