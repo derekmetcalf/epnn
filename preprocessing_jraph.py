@@ -162,6 +162,36 @@ def get_init_crystal_states(distance_encoding_type = "root", # ["log1","root","n
     return descriptors, distances, distances_encoded, init_charges, gt_charges, cutoff_mask, types, ohe_types
 
 
+def get_init_distances(formula = "SrTiO3",
+                        r_switch=0.1,
+                        r_cut=10.0):
+    try:
+        with open (os.getcwd()+"/presets.json") as f:
+            presets = json.load(f)
+            presets = presets[formula]
+    except:
+        raise ValueError(f"Formula {formula} not found in presets.json.")
+    path = presets["path"]
+    positions = []
+    cell_lengths = []
+    cell_size = np.array([])
+    with ase.db.connect(path) as db:
+        for idx, row in enumerate(tqdm.auto.tqdm(db.select(), total=db.count())):
+            atoms = row.toatoms()
+            positions.append(atoms.get_positions())
+            cell_lengths.append(atoms.cell.lengths())
+            cell_size = atoms.cell
+    positions = jnp.asarray(positions)
+    cell_size = np.array(cell_size)
+    if formula == "SrTiO3":
+        # Run this as cell size of z-axis is irrelevant
+        cell_size[2,2]=0.0
+    cell_size = jnp.array(cell_size)
+    distances = v_center_at_atoms_diagonal(positions,jnp.repeat(jnp.diag(cell_size)[jnp.newaxis,:],positions.shape[0], axis=0))
+    cutoff_mask = get_cutoff_mask(batched_distances = distances, R_SWITCH = r_switch, R_CUT = r_cut)
+    return distances, cutoff_mask
+
+
 
 def get_init_charges_for_comparison(
                             path,
@@ -247,12 +277,10 @@ def get_init_charges_for_comparison(
                 symbols = extended_symbols
             types.append([SYMBOL_MAP[s] for s in symbols])
             atomic_numbers.append(atoms.get_atomic_numbers())
-    if not SAMPLE_SIZE:
-        SAMPLE_SIZE = idx+1
 
     types = jnp.asarray(types)
     gt_charges = jnp.asarray(charges)
-    total_charges = jnp.repeat(jnp.float32(presets["total_charge"]), SAMPLE_SIZE)
+    total_charges = jnp.repeat(jnp.float32(presets["total_charge"]), types.shape[0])
 
     
     # This can be changed to "average", so all charges are initialized as 0.0

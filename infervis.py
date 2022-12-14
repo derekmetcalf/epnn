@@ -97,7 +97,7 @@ def infer(model_path, db_path, formula, max_batch_size = 50):
         # print(np.asarray(output).shape)
     return output
 
-def get_visualization_testbatch(model_config, db_path, formula):
+def get_visualization_testbatch(model_config, db_path, formula, validation = False):
     """ Visualize the results of a model on a batch of data about a chemical structure.
     Input: 
         - model_config: str -> Path to the saved model config.
@@ -118,7 +118,10 @@ def get_visualization_testbatch(model_config, db_path, formula):
 
     if total_size < batch_size: batch_size = total_size
     permuted_idx = random.permutation(key, total_size)
-    test_idx = permuted_idx[-batch_size:]
+    if validation:
+        test_idx = permuted_idx[(-2*batch_size):-batch_size]
+    else:
+        test_idx = permuted_idx[-batch_size:]
     
     #######################################
     ### Creating batches for training #####
@@ -133,7 +136,9 @@ def get_visualization_testbatch(model_config, db_path, formula):
 
 
 
-def visualize_results(model_path, FORMULA, batches = None,db_path = None, xrange = [-1.5,2.1],  save_name = None):
+
+
+def visualize_results(model_path, FORMULA, batches = None,db_path = None, xrange = [-1.5,2.1],  save_name = None, validation = False):
     """Visualize the results of a model on a batch of data about a chemical structure.
     Input: 
         - model_path: str -> Path to the saved model.
@@ -152,12 +157,7 @@ def visualize_results(model_path, FORMULA, batches = None,db_path = None, xrange
     # except:
     #     E_DIM, R_SWITCH, R_CUT, DISTANCE_ENCODING_TYPE, FEATURES, NUM_PASSES, ACTIVATION, N_EPOCHS, LR, WEIGHT_DECAY = get_parameters_from_index(model_config)
     #     ETA = 2.0
-    @jax.jit
-    def mae_loss(params: hk.Params, graph: jraph.GraphsTuple,  ground_truth: jnp.array) -> jnp.ndarray:
-        output = model.apply(params, graph)
-        for i in range(NUM_PASSES-1):
-            output = model.apply(params, output)
-        return jnp.sum(jnp.abs(output[0]-ground_truth)/len(ground_truth))
+    
     model = model_results["model"]
     params = model_results["params"]
     if batches:
@@ -167,19 +167,22 @@ def visualize_results(model_path, FORMULA, batches = None,db_path = None, xrange
         true_labels = batches["true_labels_test"].flatten()
         types = types[test_idx]
     elif db_path:
-        batch_dict = get_visualization_testbatch(model_config, db_path, FORMULA)
+        batch_dict = get_visualization_testbatch(model_config, db_path, FORMULA, validation)
         types = batch_dict["types"]
         batch = batch_dict["batch"]
         true_labels = batch_dict["true_labels"].flatten()
     else:
         print("Please provide 'batches'-dict or db_path.")
         return
-    test_mae = mae_loss(params, batch, true_labels)
-    print("MAE:",test_mae)
+
     output = model.apply(params, batch)
     for i in range(NUM_PASSES-1):
         output = model.apply(params, output)
 
+    test_mae = jnp.sum(jnp.abs(output[0]-true_labels)/len(true_labels))
+    test_rmse = jnp.sqrt(jnp.sum(jnp.square(output[0]-true_labels)/len(true_labels)))
+    print("MAE:",test_mae)
+    print("RMSE:",test_rmse)
     # Getting the colors for different chemical formulas for different chemical formulas
     try:
         with open (os.getcwd()+"/presets.json") as f:
@@ -214,8 +217,7 @@ def visualize_results(model_path, FORMULA, batches = None,db_path = None, xrange
     return fig
 
 
-
-def calculate_and_visualize_results_no_training(FORMULA, db_path = None, xrange = [-1.5,2.1],  save_name = None):
+def calculate_and_visualize_results_no_training(FORMULA, db_path = None, xrange = [-1.5,2.1],  save_name = None, validation = False):
     """Visualize the results of a model on a batch of data about a chemical structure.
     Input: 
         - model_path: str -> Path to the saved model.
@@ -228,9 +230,24 @@ def calculate_and_visualize_results_no_training(FORMULA, db_path = None, xrange 
         - Image of plot.
     """
     init_charges, gt_charges, types = get_init_charges_for_comparison(path = db_path, formula = FORMULA)
-    init_charges=init_charges[:,:,0].flatten()
-    gt_charges = gt_charges.flatten()
-    types = types.flatten()
+    total_size = init_charges.shape[0]
+    key = random.PRNGKey(0)
+    if FORMULA == "SrTiO3":
+        batch_size = 50
+    else:
+        batch_size = 34
+
+    if total_size < batch_size: batch_size = total_size
+    permuted_idx = random.permutation(key, total_size)
+    if validation:
+        test_idx = permuted_idx[(-2*batch_size):-batch_size]
+    else:
+        test_idx = permuted_idx[-batch_size:]
+
+    init_charges=init_charges[test_idx,:,0].flatten()
+    gt_charges = gt_charges[test_idx].flatten()
+
+    types = types[test_idx].flatten()
     MAE = jnp.sum(jnp.abs(init_charges-gt_charges)/len(gt_charges))
     RMSE = jnp.sqrt(jnp.sum(jnp.square(init_charges-gt_charges)/len(gt_charges)))
 
